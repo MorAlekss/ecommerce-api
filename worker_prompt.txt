@@ -1,0 +1,86 @@
+You are a batch migration worker. Your task is strictly scoped.
+You have NO access to the coordinator's context — everything you need is below.
+
+## Overall goal
+Migrate all HTTP calls from requests library to httpx async across the codebase.
+
+## Your specific task
+Unit 7: Migrate utils module — http.py, retry.py, middleware.py from requests to httpx async. Also update requirements.txt.
+
+## Files to modify
+src/utils/http.py
+src/utils/retry.py
+src/utils/middleware.py
+requirements.txt
+
+## What to change
+Pattern: `import requests` → `import httpx`
+Pattern: `requests.get(...)` → `async with httpx.AsyncClient() as client: response = await client.get(...)`
+Pattern: sync functions → `async def` functions with `await`
+Pattern: `response.json()` stays the same, `response.raise_for_status()` stays the same
+Pattern: `requests.exceptions.RequestException` → `httpx.HTTPError`
+Pattern: `requests.request(method, ...)` → `async with httpx.AsyncClient() as client: await client.request(method, ...)`
+
+For requirements.txt:
+- Remove: `requests==2.32.5`
+- Add: `httpx>=0.27.0`
+
+Example migration for retry.py:
+```python
+# BEFORE
+import time
+import requests
+
+def retry_request(func, max_retries=3, backoff=1.0):
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            return func()
+        except requests.exceptions.RequestException as e:
+            last_error = e
+            if attempt < max_retries - 1:
+                time.sleep(backoff * (2 ** attempt))
+    raise last_error
+
+# AFTER
+import time
+import httpx
+
+async def retry_request(func, max_retries=3, backoff=1.0):
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            return await func()
+        except httpx.HTTPError as e:
+            last_error = e
+            if attempt < max_retries - 1:
+                time.sleep(backoff * (2 ** attempt))
+    raise last_error
+```
+
+## Codebase conventions
+- Functions use snake_case
+- Import from src.config for API_BASE_URL, API_KEY
+- Use response.raise_for_status() for error handling
+- Return response.json() for JSON responses, response.status_code for status-only
+
+## E2E test recipe
+pip install httpx
+python3 -m pytest tests/unit/test_utils.py --tb=short -q
+
+## Instructions
+Safety rules — follow these before anything else:
+- NEVER delete source files. If migration fails, revert: git checkout -- <file>
+- Install required dependencies before starting: pip install httpx
+- Run baseline tests BEFORE any changes: python3 -m pytest tests/unit/test_utils.py --tb=short -q
+- STRICT SCOPE: Modify ONLY the files listed in "Files to modify". If other files in your worktree seem wrong or outdated — that is EXPECTED. Do NOT fix them.
+
+After implementing the change:
+1. Review — run `/requesting-code-review`. STOP. Do not proceed to step 2 until review is complete.
+2. Re-review — if you made ANY additional changes after step 1, run `/requesting-code-review` again before committing.
+3. Run unit tests — run: python3 -m pytest tests/unit/test_utils.py --tb=short -q
+4. Test end-to-end — follow the e2e test recipe above
+5. Commit and push — git add -A && git commit -m "batch: migrate utils module to httpx async" && git push origin HEAD:batch/unit-07
+6. Create PR — gh pr create --title "Batch: migrate utils module to httpx async" --body "Migrated http.py, retry.py, middleware.py from requests to httpx async client. Updated requirements.txt."
+7. Report — end your response with exactly one line: PR: <url>
+   If no PR was created, end with: PR: none - <reason>
