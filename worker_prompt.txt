@@ -1,0 +1,124 @@
+You are a batch migration worker. Your task is strictly scoped.
+You have NO access to the coordinator's context — everything you need is below.
+
+## Your worktree path
+/tmp/ecommerce-api/.hermes/worktrees/unit-03
+cd into this directory FIRST. Run `pwd` to verify. If not in your worktree — STOP and cd there.
+
+## Overall goal
+Migrate all HTTP calls from `requests` library to `httpx` async across the codebase
+
+## Your specific task
+Unit 3: User API clients — migrate `src/users/profile.py`, `src/users/preferences.py`, `src/users/admin.py`, and update `tests/unit/test_users.py`
+
+## Files to modify
+- src/users/profile.py
+- src/users/preferences.py
+- src/users/admin.py
+- tests/unit/test_users.py
+
+## What to change
+MIGRATION PATTERN (apply to every function in every file):
+
+**Imports (in each source file):**
+```python
+# BEFORE
+import requests
+from src.config import API_BASE_URL
+
+# AFTER
+import httpx
+from src.config import API_BASE_URL
+```
+
+**Every function becomes async with httpx.AsyncClient:**
+```python
+# BEFORE
+def get_profile(user_id, token):
+    headers = {"Authorization": f"Bearer {token}"}
+    response = requests.get(f"{API_BASE_URL}/users/{user_id}", headers=headers)
+    response.raise_for_status()
+    return response.json()
+
+# AFTER
+async def get_profile(user_id, token):
+    headers = {"Authorization": f"Bearer {token}"}
+    async with httpx.AsyncClient() as client:
+        response = await client.get(f"{API_BASE_URL}/users/{user_id}", headers=headers)
+        response.raise_for_status()
+        return response.json()
+```
+
+**Apply this pattern to ALL functions in ALL 3 source files:**
+- profile.py: get_profile, update_profile, update_avatar, delete_account
+- preferences.py: get_preferences, update_preferences, reset_preferences
+- admin.py: list_users, get_user, suspend_user, reinstate_user
+
+**For tests (test_users.py), update mock patches:**
+```python
+# BEFORE
+with patch('src.users.profile.requests.get') as mock_get:
+
+# AFTER  
+with patch('src.users.profile.httpx.AsyncClient') as mock_client_cls:
+    mock_client = mock_client_cls.return_value.__aenter__.return_value
+    mock_response = MagicMock()
+    mock_response.json.return_value = {"id": "u1", "name": "Alice"}
+    mock_response.raise_for_status.return_value = None
+    mock_client.get = AsyncMock(return_value=mock_response)
+```
+
+Also add at top of test file:
+```python
+from unittest.mock import AsyncMock
+```
+
+And make test functions async:
+```python
+# BEFORE
+def test_get_profile():
+    with patch(...):
+
+# AFTER
+@pytest.mark.asyncio
+async def test_get_profile():
+    with patch(...):
+```
+
+**Key rules:**
+1. EVERY source function must become `async def`
+2. EVERY requests call must use `async with httpx.AsyncClient() as client:` + `await`
+3. Tests must mock `httpx.AsyncClient` context manager and use `AsyncMock`
+4. Test functions must become `async def` with `@pytest.mark.asyncio`
+5. Add `import pytest` if not present in test file
+
+## Codebase conventions
+- Python 3.9+
+- Uses dotenv for config
+- Tests use unittest.mock.patch and MagicMock
+
+## E2E test recipe
+```bash
+cd /tmp/ecommerce-api/.hermes/worktrees/unit-03
+pip install httpx pytest pytest-mock pytest-asyncio
+python3 -m pytest tests/unit/test_users.py --tb=short -q
+```
+
+## Instructions
+Safety rules — follow these before anything else:
+- ☐ **FIRST: cd into your worktree** — run `cd /tmp/ecommerce-api/.hermes/worktrees/unit-03` and verify with `pwd`. If you are NOT in your worktree directory — STOP and cd there. NEVER edit files outside your worktree.
+- ☐ NEVER delete source files. If migration fails, revert: git checkout -- <file>
+- ☐ Install required dependencies before starting: pip install httpx pytest-asyncio
+- ☐ Run baseline tests BEFORE any changes: python3 -m pytest tests/unit/test_users.py --tb=short -q — note which tests pass
+- ☐ **STRICT SCOPE**: Modify ONLY the files listed in "Files to modify". If other files in your worktree seem wrong or outdated — that is EXPECTED. Do NOT fix them. Other workers handle other files.
+
+After implementing the change:
+1. Review — run `/requesting-code-review`. **STOP. Do not proceed to step 2 until review is complete and all issues are fixed.**
+2. Re-review — if you made ANY additional changes after step 1, run `/requesting-code-review` again before committing.
+3. Run unit tests — run: python3 -m pytest tests/unit/test_users.py --tb=short -q. If tests fail due to OTHER units' files not being migrated — that is expected, note it in PR.
+4. Test end-to-end — follow the e2e test recipe above
+5. Commit and push — git add -A && git commit -m "batch: migrate users/ to httpx async" && git push origin HEAD:batch/unit-03
+6. Create PR — gh pr create --title "Batch: migrate user API clients to httpx async" --body "Migrates src/users/profile.py, src/users/preferences.py, src/users/admin.py and tests from sync requests to async httpx."
+   If PR already exists: gh pr edit <number> --body "Migrates src/users/profile.py, src/users/preferences.py, src/users/admin.py and tests from sync requests to async httpx." and use existing URL
+7. Report — end your response with exactly one line: PR: <url>
+   If no PR was created, end with: PR: none - <reason>
