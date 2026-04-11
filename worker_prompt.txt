@@ -1,0 +1,143 @@
+You are a batch migration worker. Your task is strictly scoped.
+You have NO access to the coordinator's context — everything you need is below.
+
+## Your worktree path
+/tmp/ecommerce-api/.hermes/worktrees/unit-02
+cd into this directory FIRST. Run `pwd` to verify. If not in your worktree — STOP and cd there.
+
+## Overall goal
+Migrate all HTTP calls from `requests` library to `httpx` async across the codebase
+
+## Your specific task
+Unit 2: Retry logic — migrate `src/utils/retry.py` to async httpx
+
+## Files to modify
+- src/utils/retry.py
+
+## What to change
+MIGRATION PATTERN (apply to every function):
+
+**Imports:**
+```python
+# BEFORE
+import time
+import requests
+
+# AFTER
+import time
+import httpx
+```
+
+**Exception handling:**
+```python
+# BEFORE
+except requests.exceptions.RequestException as e:
+
+# AFTER
+except httpx.RequestError as e:
+```
+
+**retry_request must become async:**
+```python
+# BEFORE
+def retry_request(func, max_retries=3, backoff=1.0):
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            return func()
+        except requests.exceptions.RequestException as e:
+            last_error = e
+            if attempt < max_retries - 1:
+                time.sleep(backoff * (2 ** attempt))
+    raise last_error
+
+# AFTER
+async def retry_request(func, max_retries=3, backoff=1.0):
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            return await func()
+        except httpx.RequestError as e:
+            last_error = e
+            if attempt < max_retries - 1:
+                time.sleep(backoff * (2 ** attempt))
+    raise last_error
+```
+
+**get_with_retry must become async with httpx.AsyncClient:**
+```python
+# BEFORE
+def get_with_retry(url, params=None, headers=None, max_retries=3):
+    def _request():
+        response = requests.get(url, params=params, headers=headers)
+        response.raise_for_status()
+        return response.json()
+    return retry_request(_request, max_retries=max_retries)
+
+# AFTER
+async def get_with_retry(url, params=None, headers=None, max_retries=3):
+    async def _request():
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, params=params, headers=headers)
+            response.raise_for_status()
+            return response.json()
+    return await retry_request(_request, max_retries=max_retries)
+```
+
+**Same pattern for post_with_retry:**
+```python
+# BEFORE
+def post_with_retry(url, data=None, headers=None, max_retries=3):
+    def _request():
+        response = requests.post(url, json=data, headers=headers)
+        response.raise_for_status()
+        return response.json()
+    return retry_request(_request, max_retries=max_retries)
+
+# AFTER
+async def post_with_retry(url, data=None, headers=None, max_retries=3):
+    async def _request():
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, json=data, headers=headers)
+            response.raise_for_status()
+            return response.json()
+    return await retry_request(_request, max_retries=max_retries)
+```
+
+**Key rules:**
+1. EVERY function that uses requests must become `async def`
+2. Inner `_request` closures must also become `async def` and use `await`
+3. The `retry_request` call itself must use `await`
+4. `except requests.exceptions.RequestException` → `except httpx.RequestError`
+
+## Codebase conventions
+- Python 3.9+
+- Uses dotenv for config
+- Tests use unittest.mock.patch
+
+## E2E test recipe
+```bash
+cd /tmp/ecommerce-api/.hermes/worktrees/unit-02
+pip install httpx pytest pytest-mock pytest-asyncio
+# No dedicated test file for retry.py, but verify imports work:
+python3 -c "from src.utils.retry import retry_request, get_with_retry, post_with_retry; print('OK')"
+```
+
+## Instructions
+Safety rules — follow these before anything else:
+- ☐ **FIRST: cd into your worktree** — run `cd /tmp/ecommerce-api/.hermes/worktrees/unit-02` and verify with `pwd`. If you are NOT in your worktree directory — STOP and cd there. NEVER edit files outside your worktree.
+- ☐ NEVER delete source files. If migration fails, revert: git checkout -- <file>
+- ☐ Install required dependencies before starting: pip install httpx pytest-asyncio
+- ☐ Run baseline check BEFORE any changes: python3 -c "from src.utils.retry import retry_request, get_with_retry, post_with_retry; print('OK')"
+- ☐ **STRICT SCOPE**: Modify ONLY the files listed in "Files to modify". If other files in your worktree seem wrong or outdated — that is EXPECTED. Do NOT fix them. Other workers handle other files.
+
+After implementing the change:
+1. Review — run `/requesting-code-review`. **STOP. Do not proceed to step 2 until review is complete and all issues are fixed.**
+2. Re-review — if you made ANY additional changes after step 1, run `/requesting-code-review` again before committing.
+3. Run unit tests — run: python3 -m pytest tests/ --tb=short -q. If tests fail due to OTHER units' files not being migrated — that is expected, note it in PR.
+4. Test end-to-end — follow the e2e test recipe above
+5. Commit and push — git add -A && git commit -m "batch: migrate retry.py to httpx async" && git push origin HEAD:batch/unit-02
+6. Create PR — gh pr create --title "Batch: migrate retry logic to httpx async" --body "Migrates src/utils/retry.py from sync requests to async httpx with proper RequestError exception handling."
+   If PR already exists: gh pr edit <number> --body "Migrates src/utils/retry.py from sync requests to async httpx with proper RequestError exception handling." and use existing URL
+7. Report — end your response with exactly one line: PR: <url>
+   If no PR was created, end with: PR: none - <reason>
