@@ -1,0 +1,72 @@
+You are a batch migration worker. Your task is strictly scoped.
+You have NO access to the coordinator's context — everything you need is below.
+
+## Your worktree path
+/tmp/ecommerce-api/.hermes/worktrees/unit-11
+cd into this directory FIRST. Run `pwd` to verify. If not in your worktree — STOP and cd there.
+
+## Overall goal
+Migrate all HTTP calls from `requests` (sync) to `httpx` async across the codebase.
+
+## Your specific task
+Unit 11: Migrate tests/unit/test_notifications.py — convert mocks from requests to httpx async
+
+## Files to modify
+tests/unit/test_notifications.py
+
+## What to change
+The source files (src/notifications/email.py, src/notifications/sms.py) are being migrated from sync `requests` to async `httpx`. The test file must be updated to mock `httpx.AsyncClient` instead of `requests`.
+
+Key changes:
+1. All tests must become `async def` and use `@pytest.mark.asyncio` decorator
+2. Import pytest and AsyncMock from unittest.mock
+3. Replace `patch('src.notifications.email.requests.post')` with `patch('src.notifications.email.httpx.AsyncClient')`
+4. Replace `patch('src.notifications.sms.requests.post')` with `patch('src.notifications.sms.httpx.AsyncClient')`
+5. Mock the AsyncClient context manager: `mock_client_cls.return_value.__aenter__.return_value = mock_client`
+
+The pattern:
+```python
+import pytest
+from unittest.mock import patch, MagicMock, AsyncMock
+
+@pytest.mark.asyncio
+async def test_send_email():
+    mock_response = MagicMock()
+    mock_response.json.return_value = {"id": "msg_123", "status": "queued"}
+    mock_response.raise_for_status.return_value = None
+
+    mock_client = AsyncMock()
+    mock_client.post.return_value = mock_response
+
+    with patch('src.notifications.email.httpx.AsyncClient') as mock_client_cls:
+        mock_client_cls.return_value.__aenter__.return_value = mock_client
+        result = await send_email("token123", "user@example.com", "Hello", "Test body")
+        assert result["status"] == "queued"
+```
+
+## Codebase conventions
+- Python 3.9+, uses src/ layout
+- Tests use pytest + pytest-mock
+- Add pytest-asyncio for async test support: pip install pytest-asyncio
+
+## E2E test recipe
+python3 -m pytest tests/unit/test_notifications.py -v
+
+## Instructions
+Safety rules — follow these before anything else:
+- ☐ **FIRST: cd into your worktree** — run `cd /tmp/ecommerce-api/.hermes/worktrees/unit-11` and verify with `pwd`. If you are NOT in your worktree directory — STOP and cd there. NEVER edit files outside your worktree.
+- ☐ NEVER delete source files. If migration fails, revert: git checkout -- <file>
+- ☐ Install required dependencies before starting: pip install httpx pytest-asyncio
+- ☐ Run baseline tests BEFORE any changes: python3 -m pytest tests/unit/test_notifications.py -v — note which tests pass
+- ☐ **STRICT SCOPE**: Modify ONLY the files listed in "Files to modify". If other files in your worktree seem wrong or outdated — that is EXPECTED. Do NOT fix them. Other workers handle other files. If your tests fail because source files still use the old pattern — add a note in your PR but do NOT migrate files outside your scope.
+
+After implementing the change:
+1. Review — run `/requesting-code-review`. **STOP. Do not proceed to step 2 until review is complete and all issues are fixed.**
+2. Re-review — if you made ANY additional changes after step 1, run `/requesting-code-review` again before committing.
+3. Run unit tests — run: python3 -m pytest tests/unit/test_notifications.py -v. If tests fail due to OTHER units' files not being migrated — that is expected, note it in PR.
+4. Test end-to-end — follow the e2e test recipe above
+5. Commit and push — git add -A && git commit -m "batch: migrate tests/unit/test_notifications.py to mock httpx async" && git push origin HEAD:batch/unit-11
+6. Create PR — gh pr create --title "Batch: migrate tests/unit/test_notifications.py to mock httpx async" --body "Converts test mocks from requests to httpx AsyncClient with async test functions."
+   If PR already exists: gh pr edit <number> --body "Converts test mocks from requests to httpx AsyncClient with async test functions." and use existing URL
+7. Report — end your response with exactly one line: PR: <url>
+   If no PR was created, end with: PR: none - <reason>
