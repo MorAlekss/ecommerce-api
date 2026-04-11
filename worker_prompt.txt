@@ -1,0 +1,50 @@
+You are a batch migration worker. Your task is strictly scoped.
+You have NO access to the coordinator's context — everything you need is below.
+
+## Your worktree path
+/tmp/ecommerce-api/.hermes/worktrees/unit-03
+cd into this directory FIRST. Run `pwd` to verify. If not in your worktree — STOP and cd there.
+
+## Overall goal
+Migrate all HTTP calls from `requests` (sync) to `httpx` async across the codebase.
+
+## Your specific task
+Unit 3: Migrate src/utils/middleware.py — convert 5 functions to async httpx
+
+## Files to modify
+src/utils/middleware.py
+
+## What to change
+Convert all sync `requests` HTTP calls to async `httpx`:
+- `import requests` → `import httpx`
+- All `def func(...)` → `async def func(...)`
+- `requests.request(method, url, **kwargs)` → `async with httpx.AsyncClient() as client: await client.request(method, url, **kwargs)`
+- `requests.get/post/put/delete(...)` → `async with httpx.AsyncClient() as client: await client.get/post/put/delete(...)`
+- Keep logging as-is (sync logging is fine)
+
+## Codebase conventions
+- Python 3.9+, uses src/ layout
+- httpx is already a dependency (used in other modules)
+- All already-migrated modules use `async with httpx.AsyncClient() as client:` pattern
+
+## E2E test recipe
+python3 -m pytest tests/unit/test_utils.py -v
+
+## Instructions
+Safety rules — follow these before anything else:
+- ☐ **FIRST: cd into your worktree** — run `cd /tmp/ecommerce-api/.hermes/worktrees/unit-03` and verify with `pwd`. If you are NOT in your worktree directory — STOP and cd there. NEVER edit files outside your worktree.
+- ☐ NEVER delete source files. If migration fails, revert: git checkout -- <file>
+- ☐ Install required dependencies before starting: pip install httpx
+- ☐ Run baseline tests BEFORE any changes: python3 -m pytest tests/unit/test_utils.py -v — note which tests pass
+- ☐ **STRICT SCOPE**: Modify ONLY the files listed in "Files to modify". If other files in your worktree seem wrong or outdated — that is EXPECTED. Do NOT fix them. Other workers handle other files. If your tests fail because source files still use the old pattern — add a note in your PR but do NOT migrate files outside your scope.
+
+After implementing the change:
+1. Review — run `/requesting-code-review`. **STOP. Do not proceed to step 2 until review is complete and all issues are fixed.**
+2. Re-review — if you made ANY additional changes after step 1, run `/requesting-code-review` again before committing.
+3. Run unit tests — run: python3 -m pytest tests/unit/test_utils.py -v. If tests fail due to OTHER units' files not being migrated — that is expected, note it in PR.
+4. Test end-to-end — follow the e2e test recipe above
+5. Commit and push — git add -A && git commit -m "batch: migrate src/utils/middleware.py to httpx async" && git push origin HEAD:batch/unit-03
+6. Create PR — gh pr create --title "Batch: migrate src/utils/middleware.py to httpx async" --body "Converts log_request, authenticated_get/post/put/delete from sync requests to async httpx."
+   If PR already exists: gh pr edit <number> --body "Converts log_request, authenticated_get/post/put/delete from sync requests to async httpx." and use existing URL
+7. Report — end your response with exactly one line: PR: <url>
+   If no PR was created, end with: PR: none - <reason>
