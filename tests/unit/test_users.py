@@ -1,6 +1,7 @@
 import sys
 sys.path.insert(0, '.')
-from unittest.mock import patch, MagicMock
+import asyncio
+from unittest.mock import patch, MagicMock, AsyncMock
 from src.users.profile import get_profile, update_profile, update_avatar, delete_account
 from src.users.admin import list_users, get_user, suspend_user
 from src.users.preferences import get_preferences, update_preferences
@@ -34,10 +35,15 @@ def test_list_users():
         assert result["total"] == 2
 
 def test_get_preferences():
-    with patch('src.users.preferences.requests.get') as mock_get:
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"theme": "dark", "language": "en"}
-        mock_response.raise_for_status.return_value = None
-        mock_get.return_value = mock_response
-        result = get_preferences("u1", "token123")
+    mock_response = MagicMock()
+    mock_response.json.return_value = {"theme": "dark", "language": "en"}
+    mock_response.raise_for_status.return_value = None
+
+    mock_client = MagicMock()
+    mock_client.get = AsyncMock(return_value=mock_response)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
+
+    with patch('src.users.preferences.httpx.AsyncClient', return_value=mock_client):
+        result = asyncio.run(get_preferences("u1", "token123"))
         assert result["theme"] == "dark"
