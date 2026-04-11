@@ -1,0 +1,69 @@
+You are a batch migration worker. Your task is strictly scoped.
+You have NO access to the coordinator's context — everything you need is below.
+
+## Your worktree path
+/tmp/ecommerce-api/.hermes/worktrees/unit-01
+cd into this directory FIRST. Run `pwd` to verify. If not in your worktree — STOP and cd there.
+
+## Overall goal
+Migrate all HTTP calls from `requests` (sync) to `httpx` async across the codebase.
+
+## Your specific task
+Unit 1: Migrate src/utils/http.py — convert 5 sync request functions to async httpx
+
+## Files to modify
+src/utils/http.py
+
+## What to change
+Convert all sync `requests` HTTP calls to async `httpx`:
+- `import requests` → `import httpx`
+- Each sync `def func(...)` → `async def func(...)`
+- Each `response = requests.get/post/put/patch/delete(...)` → `async with httpx.AsyncClient() as client:\n        response = await client.get/post/put/patch/delete(...)`
+- Keep the same parameters (url, params, json, headers, etc.)
+- Keep response.raise_for_status() and response.json() / response.status_code returns
+
+Example before:
+```python
+def get(url, params=None, headers=None):
+    merged_headers = {**DEFAULT_HEADERS, **(headers or {})}
+    response = requests.get(url, params=params, headers=merged_headers)
+    response.raise_for_status()
+    return response.json()
+```
+
+Example after:
+```python
+async def get(url, params=None, headers=None):
+    merged_headers = {**DEFAULT_HEADERS, **(headers or {})}
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, params=params, headers=merged_headers)
+        response.raise_for_status()
+        return response.json()
+```
+
+## Codebase conventions
+- Python 3.9+, uses src/ layout
+- httpx is already a dependency (used in other modules)
+- All already-migrated modules use `async with httpx.AsyncClient() as client:` pattern
+
+## E2E test recipe
+python3 -m pytest tests/unit/test_utils.py -v
+
+## Instructions
+Safety rules — follow these before anything else:
+- ☐ **FIRST: cd into your worktree** — run `cd /tmp/ecommerce-api/.hermes/worktrees/unit-01` and verify with `pwd`. If you are NOT in your worktree directory — STOP and cd there. NEVER edit files outside your worktree.
+- ☐ NEVER delete source files. If migration fails, revert: git checkout -- <file>
+- ☐ Install required dependencies before starting: pip install httpx
+- ☐ Run baseline tests BEFORE any changes: python3 -m pytest tests/unit/test_utils.py -v — note which tests pass
+- ☐ **STRICT SCOPE**: Modify ONLY the files listed in "Files to modify". If other files in your worktree seem wrong or outdated — that is EXPECTED. Do NOT fix them. Other workers handle other files. If your tests fail because source files still use the old pattern — add a note in your PR but do NOT migrate files outside your scope.
+
+After implementing the change:
+1. Review — run `/requesting-code-review`. **STOP. Do not proceed to step 2 until review is complete and all issues are fixed.**
+2. Re-review — if you made ANY additional changes after step 1, run `/requesting-code-review` again before committing.
+3. Run unit tests — run: python3 -m pytest tests/unit/test_utils.py -v. If tests fail due to OTHER units' files not being migrated — that is expected, note it in PR.
+4. Test end-to-end — follow the e2e test recipe above
+5. Commit and push — git add -A && git commit -m "batch: migrate src/utils/http.py to httpx async" && git push origin HEAD:batch/unit-01
+6. Create PR — gh pr create --title "Batch: migrate src/utils/http.py to httpx async" --body "Converts 5 sync request functions (get, post, put, patch, delete) to async httpx."
+   If PR already exists: gh pr edit <number> --body "Converts 5 sync request functions (get, post, put, patch, delete) to async httpx." and use existing URL
+7. Report — end your response with exactly one line: PR: <url>
+   If no PR was created, end with: PR: none - <reason>
