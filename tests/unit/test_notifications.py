@@ -1,6 +1,7 @@
 import sys
 sys.path.insert(0, '.')
-from unittest.mock import patch, MagicMock
+import pytest
+from unittest.mock import patch, MagicMock, AsyncMock
 from src.notifications.email import send_email, send_bulk_email, get_email_status
 from src.notifications.sms import send_sms, send_bulk_sms
 
@@ -23,11 +24,20 @@ def test_send_bulk_email():
         result = send_bulk_email("token123", ["a@example.com", "b@example.com"], "Subject", "Body")
         assert result["count"] == 3
 
-def test_send_sms():
-    with patch('src.notifications.sms.requests.post') as mock_post:
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"id": "sms_123", "status": "sent"}
-        mock_response.raise_for_status.return_value = None
-        mock_post.return_value = mock_response
-        result = send_sms("+1234567890", "Your order is ready!")
+def _make_async_client_mock():
+    client = AsyncMock()
+    cm = MagicMock()
+    cm.__aenter__ = AsyncMock(return_value=client)
+    cm.__aexit__ = AsyncMock(return_value=None)
+    return client, cm
+
+@pytest.mark.asyncio
+async def test_send_sms():
+    client, cm = _make_async_client_mock()
+    mock_response = MagicMock()
+    mock_response.json.return_value = {"id": "sms_123", "status": "sent"}
+    mock_response.raise_for_status.return_value = None
+    client.post = AsyncMock(return_value=mock_response)
+    with patch('src.notifications.sms.httpx.AsyncClient', return_value=cm):
+        result = await send_sms("+123****7890", "Your order is ready!")
         assert result["status"] == "sent"
