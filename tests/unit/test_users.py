@@ -1,6 +1,7 @@
 import sys
 sys.path.insert(0, '.')
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
+import pytest
 from src.users.profile import get_profile, update_profile, update_avatar, delete_account
 from src.users.admin import list_users, get_user, suspend_user
 from src.users.preferences import get_preferences, update_preferences
@@ -24,13 +25,19 @@ def test_update_profile():
         result = update_profile("u1", "token123", {"name": "Alice Updated"})
         assert result["name"] == "Alice Updated"
 
-def test_list_users():
-    with patch('src.users.admin.requests.get') as mock_get:
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"users": [{"id": "u1"}, {"id": "u2"}], "total": 2}
-        mock_response.raise_for_status.return_value = None
-        mock_get.return_value = mock_response
-        result = list_users("admin_token")
+@pytest.mark.asyncio
+async def test_list_users():
+    mock_response = MagicMock()
+    mock_response.json.return_value = {"users": [{"id": "u1"}, {"id": "u2"}], "total": 2}
+    mock_response.raise_for_status.return_value = None
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=mock_response)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+
+    with patch('src.users.admin.httpx.AsyncClient', return_value=mock_client):
+        result = await list_users("admin_token")
         assert result["total"] == 2
 
 def test_get_preferences():
