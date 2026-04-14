@@ -1,0 +1,96 @@
+You are a batch migration worker. Your task is strictly scoped.
+You have NO access to the coordinator's context — everything you need is below.
+
+## Your worktree path
+/tmp/ecommerce-api/.hermes/worktrees/unit-03
+cd into this directory FIRST. Run `pwd` to verify. If not in your worktree — STOP and cd there.
+
+## Overall goal
+Migrate all HTTP calls from requests library to httpx async across the codebase
+
+## Your specific task
+Unit 3: Migrate src/utils/middleware.py from requests to httpx async
+
+## Files to modify
+- src/utils/middleware.py
+
+## What to change
+Migrate from sync `requests` to async `httpx.AsyncClient()`.
+
+Source file pattern (BEFORE):
+```python
+import requests
+import logging
+
+logger = logging.getLogger(__name__)
+
+def log_request(method, url, **kwargs):
+    logger.info(f"{method.upper()} {url}")
+    response = requests.request(method, url, **kwargs)
+    logger.info(f"Response: {response.status_code}")
+    return response
+
+def authenticated_get(url, token, params=None):
+    headers = {"Authorization": f"Bearer {token}"}
+    response = requests.get(url, params=params, headers=headers)
+    response.raise_for_status()
+    return response.json()
+```
+
+Target pattern (AFTER):
+```python
+import httpx
+import logging
+
+logger = logging.getLogger(__name__)
+
+async def log_request(method, url, **kwargs):
+    logger.info(f"{method.upper()} {url}")
+    async with httpx.AsyncClient() as client:
+        response = await client.request(method, url, **kwargs)
+        logger.info(f"Response: {response.status_code}")
+        return response
+
+async def authenticated_get(url, token, params=None):
+    headers = {"Authorization": f"Bearer {token}"}
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, params=params, headers=headers)
+        response.raise_for_status()
+        return response.json()
+```
+
+Apply this to ALL 5 functions: log_request, authenticated_get, authenticated_post, authenticated_put, authenticated_delete.
+- authenticated_delete returns `response.status_code` (not .json()).
+
+## Codebase conventions
+- All async functions use `async with httpx.AsyncClient() as client:` pattern
+- Functions that return JSON use `response.json()`
+- Functions that return status use `response.status_code`
+- `raise_for_status()` is always called after the request
+
+## E2E test recipe
+```bash
+cd /tmp/ecommerce-api/.hermes/worktrees/unit-03
+pip install httpx pytest pytest-mock pytest-asyncio 2>/dev/null
+python3 -m pytest --tb=short -q
+```
+
+## Instructions
+Safety rules — follow these before anything else:
+- ☐ **FIRST: cd into your worktree** — run `cd /tmp/ecommerce-api/.hermes/worktrees/unit-03` and verify with `pwd`. If you are NOT in your worktree directory — STOP and cd there. NEVER edit files outside your worktree.
+- ☐ NEVER delete source files. If migration fails, revert: git checkout -- <file>
+- ☐ Install required dependencies before starting: pip install httpx pytest pytest-mock pytest-asyncio
+- ☐ Set PYTHONPATH if needed: `export PYTHONPATH=$(pwd)`
+- ☐ Run baseline tests BEFORE any changes: `python3 -m pytest --tb=short -q` — note which tests pass
+- ☐ **STRICT SCOPE**: Modify ONLY the files listed in "Files to modify". ⛔ HARD RULE: NEVER edit any file not in your list — not even test files. If tests fail because other files are not yet migrated — commit anyway and note it in the PR. Do NOT fix files assigned to other workers.
+
+After implementing the change:
+1. Review — run `/requesting-code-review`. **STOP. Do not proceed to step 2 until review is complete and all issues are fixed.**
+2. Re-review — if you made ANY additional changes after step 1, run `/requesting-code-review` again before committing.
+3. Run unit tests — run: `python3 -m pytest --tb=short -q`. If tests fail due to OTHER units' files not being migrated — that is expected, note it in PR.
+4. Test end-to-end — follow the e2e test recipe above
+5. Commit and push — git add -A && git commit -m "batch: migrate utils/middleware from requests to httpx async" && git push origin HEAD:batch/unit-03
+6. Create PR — gh pr create --title "Batch: migrate utils/middleware from requests to httpx async" --body "Migrated src/utils/middleware.py from sync requests to async httpx."
+   If PR already exists: gh pr edit <number> --body "..." and use existing URL
+7. Report — end your response with exactly one line: PR: <url>
+   If no PR was created, end with: PR: none - <reason>
