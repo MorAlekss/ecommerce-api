@@ -1,0 +1,81 @@
+You are a batch migration worker. Your task is strictly scoped.
+You have NO access to the coordinator's context — everything you need is below.
+
+## Your worktree path
+/tmp/ecommerce-api/.hermes/worktrees/unit-05
+cd into this directory FIRST. Run `pwd` to verify. If not in your worktree — STOP and cd there.
+
+## Overall goal
+Migrate all HTTP calls from requests library to httpx async across the codebase
+
+## Your specific task
+Unit 5: Migrate src/users/preferences.py from requests to httpx async
+
+## Files to modify
+- src/users/preferences.py
+
+## What to change
+Migrate from sync `requests` to async `httpx.AsyncClient()`.
+
+Source file pattern (BEFORE):
+```python
+import requests
+from src.config import API_BASE_URL
+
+def get_preferences(user_id, token):
+    headers = {"Authorization": f"Bearer {token}"}
+    response = requests.get(f"{API_BASE_URL}/users/{user_id}/preferences", headers=headers)
+    response.raise_for_status()
+    return response.json()
+```
+
+Target pattern (AFTER):
+```python
+import httpx
+from src.config import API_BASE_URL
+
+async def get_preferences(user_id, token):
+    headers = {"Authorization": f"Bearer {token}"}
+    async with httpx.AsyncClient() as client:
+        response = await client.get(f"{API_BASE_URL}/users/{user_id}/preferences", headers=headers)
+        response.raise_for_status()
+        return response.json()
+```
+
+Apply this to ALL 3 functions: get_preferences, update_preferences, reset_preferences.
+- update_preferences uses PUT with json=preferences
+- reset_preferences uses DELETE and returns `response.status_code`
+
+## Codebase conventions
+- All async functions use `async with httpx.AsyncClient() as client:` pattern
+- See existing httpx async examples in src/auth/login.py, src/users/profile.py (if already migrated)
+- Functions that return JSON use `response.json()`
+- Functions that return status use `response.status_code`
+- `raise_for_status()` is always called after the request
+
+## E2E test recipe
+```bash
+cd /tmp/ecommerce-api/.hermes/worktrees/unit-05
+pip install httpx pytest pytest-mock pytest-asyncio 2>/dev/null
+python3 -m pytest --tb=short -q
+```
+
+## Instructions
+Safety rules — follow these before anything else:
+- ☐ **FIRST: cd into your worktree** — run `cd /tmp/ecommerce-api/.hermes/worktrees/unit-05` and verify with `pwd`. If you are NOT in your worktree directory — STOP and cd there. NEVER edit files outside your worktree.
+- ☐ NEVER delete source files. If migration fails, revert: git checkout -- <file>
+- ☐ Install required dependencies before starting: pip install httpx pytest pytest-mock pytest-asyncio
+- ☐ Set PYTHONPATH if needed: `export PYTHONPATH=$(pwd)`
+- ☐ Run baseline tests BEFORE any changes: `python3 -m pytest --tb=short -q` — note which tests pass
+- ☐ **STRICT SCOPE**: Modify ONLY the files listed in "Files to modify". ⛔ HARD RULE: NEVER edit any file not in your list — not even test files. If tests fail because other files are not yet migrated — commit anyway and note it in the PR. Do NOT fix files assigned to other workers.
+
+After implementing the change:
+1. Review — run `/requesting-code-review`. **STOP. Do not proceed to step 2 until review is complete and all issues are fixed.**
+2. Re-review — if you made ANY additional changes after step 1, run `/requesting-code-review` again before committing.
+3. Run unit tests — run: `python3 -m pytest --tb=short -q`. If tests fail due to OTHER units' files not being migrated — that is expected, note it in PR.
+4. Test end-to-end — follow the e2e test recipe above
+5. Commit and push — git add -A && git commit -m "batch: migrate users/preferences from requests to httpx async" && git push origin HEAD:batch/unit-05
+6. Create PR — gh pr create --title "Batch: migrate users/preferences from requests to httpx async" --body "Migrated src/users/preferences.py from sync requests to async httpx."
+   If PR already exists: gh pr edit <number> --body "..." and use existing URL
+7. Report — end your response with exactly one line: PR: <url>
+   If no PR was created, end with: PR: none - <reason>
