@@ -1,27 +1,39 @@
 import sys
 sys.path.insert(0, '.')
-from unittest.mock import patch, MagicMock
+import pytest
+from unittest.mock import patch, MagicMock, AsyncMock
 from src.users.profile import get_profile, update_profile, update_avatar, delete_account
 from src.users.admin import list_users, get_user, suspend_user
 from src.users.preferences import get_preferences, update_preferences
 
 
-def test_get_profile():
-    with patch('src.users.profile.requests.get') as mock_get:
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"id": "u1", "name": "Alice", "email": "alice@example.com"}
-        mock_response.raise_for_status.return_value = None
-        mock_get.return_value = mock_response
-        result = get_profile("u1", "token123")
+def _make_async_client_mock():
+    client = AsyncMock()
+    cm = MagicMock()
+    cm.__aenter__ = AsyncMock(return_value=client)
+    cm.__aexit__ = AsyncMock(return_value=None)
+    return client, cm
+
+@pytest.mark.asyncio
+async def test_get_profile():
+    client, cm = _make_async_client_mock()
+    mock_response = MagicMock()
+    mock_response.json.return_value = {"id": "u1", "name": "Alice", "email": "alice@example.com"}
+    mock_response.raise_for_status.return_value = None
+    client.get = AsyncMock(return_value=mock_response)
+    with patch('src.users.profile.httpx.AsyncClient', return_value=cm):
+        result = await get_profile("u1", "token123")
         assert result["name"] == "Alice"
 
-def test_update_profile():
-    with patch('src.users.profile.requests.put') as mock_put:
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"id": "u1", "name": "Alice Updated"}
-        mock_response.raise_for_status.return_value = None
-        mock_put.return_value = mock_response
-        result = update_profile("u1", "token123", {"name": "Alice Updated"})
+@pytest.mark.asyncio
+async def test_update_profile():
+    client, cm = _make_async_client_mock()
+    mock_response = MagicMock()
+    mock_response.json.return_value = {"id": "u1", "name": "Alice Updated"}
+    mock_response.raise_for_status.return_value = None
+    client.put = AsyncMock(return_value=mock_response)
+    with patch('src.users.profile.httpx.AsyncClient', return_value=cm):
+        result = await update_profile("u1", "token123", {"name": "Alice Updated"})
         assert result["name"] == "Alice Updated"
 
 def test_list_users():
