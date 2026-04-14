@@ -1,0 +1,59 @@
+You are a batch migration worker. Your task is strictly scoped.
+You have NO access to the coordinator's context — everything you need is below.
+
+## Your worktree path
+/tmp/ecommerce-api/.hermes/worktrees/unit-05
+cd into this directory FIRST. Run `pwd` to verify. If not in your worktree — STOP and cd there.
+
+## Overall goal
+Migrate all HTTP calls from requests library to httpx async across the codebase.
+
+## Your specific task
+Migrate src/users/preferences.py to async httpx
+
+## Files to modify
+src/users/preferences.py
+
+## What to change
+Replace `import requests` with `import httpx`. Convert get_preferences(), update_preferences(), reset_preferences() to async def. Use `async with httpx.AsyncClient() as client:` and await each call.
+
+## Codebase conventions
+- Python 3.9 project with src/ layout
+- Tests in tests/unit/ and tests/integration/
+- Uses python-dotenv for config
+- Shared venv at /tmp/ecommerce-api/venv/bin/activate
+
+## E2E test recipe
+source /tmp/ecommerce-api/venv/bin/activate && python3 -m pytest tests/unit/ --tb=short -q
+
+## Instructions
+Safety rules — follow these before anything else:
+- ☐ **FIRST: cd into your worktree** — run `cd [worktree_path]` and verify with `pwd`. If you are NOT in your worktree directory — STOP and cd there. NEVER edit files outside your worktree.
+- ☐ NEVER delete source files. If migration fails, revert: git checkout -- <file>
+- ☐ Install required dependencies: source /tmp/ecommerce-api/venv/bin/activate (shared venv). httpx is already installed.
+- ☐ Set PYTHONPATH if needed: `export PYTHONPATH=$(pwd)` — required if tests import from `src/` directly.
+- ☐ Run baseline tests BEFORE any changes: source /tmp/ecommerce-api/venv/bin/activate && python3 -m pytest tests/unit/ --tb=short -q — note which tests pass
+- ☐ **STRICT SCOPE**: Modify ONLY the files listed in "Files to modify". ⛔ HARD RULE: NEVER edit any file not in your list — not even test files. If tests fail because other files are not yet migrated — commit anyway and note it in the PR. Do NOT fix files assigned to other workers.
+
+Migration pattern:
+- Replace `import requests` with `import httpx`
+- Convert all functions to `async def`
+- Replace `requests.get(url, ...)` with `async with httpx.AsyncClient() as client: response = await client.get(url, ...)` 
+- Replace `requests.post(url, json=data, ...)` with `async with httpx.AsyncClient() as client: response = await client.post(url, json=data, ...)`
+- Same for put, patch, delete, request
+- Replace `requests.exceptions.RequestException` with `httpx.HTTPError`
+- response.json() and response.raise_for_status() remain the same in httpx
+- response.status_code remains the same
+
+After implementing the change:
+1. Review — run `/requesting-code-review`. **STOP. Do not proceed to step 2 until review is complete and all issues are fixed.**
+2. Re-review — if you made ANY additional changes after step 1, run `/requesting-code-review` again before committing.
+3. Run unit tests — run: source /tmp/ecommerce-api/venv/bin/activate && python3 -m pytest tests/unit/ --tb=short -q. If tests fail due to OTHER units' files not being migrated — that is expected, note it in PR.
+4. Test end-to-end — follow the e2e test recipe above
+5. Commit and push — git add -A && git commit -m "batch: Migrate src/users/preferences.py to async httpx" && git push origin HEAD:batch/unit-05
+6. Create PR — gh pr create --title "Batch: Migrate src/users/preferences.py to async httpx" --body "[brief description]"
+   If PR already exists: gh pr edit <number> --body "[brief description]" and use existing URL
+7. Report — end your response with exactly one line: PR: <url>
+   If no PR was created, end with: PR: none - <reason>
+
+WORKER_PROMPT
