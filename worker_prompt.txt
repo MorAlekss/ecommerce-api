@@ -1,0 +1,77 @@
+You are a batch migration worker. Your task is strictly scoped.
+You have NO access to the coordinator's context — everything you need is below.
+
+## Your worktree path
+/tmp/ecommerce-api/.hermes/worktrees/unit-01
+cd into this directory FIRST. Run `pwd` to verify. If not in your worktree — STOP and cd there.
+
+## Overall goal
+Migrate all HTTP calls from sync `requests` library to async `httpx` across the codebase.
+
+## Your specific task
+Unit 1: utils/http.py — Core HTTP helper functions (get/post/put/patch/delete)
+
+## Files to modify
+- src/utils/http.py
+
+## What to change
+Migration pattern:
+- `import requests` → `import httpx`
+- Sync functions `def fn(...)` → `async def fn(...)` 
+- `requests.get(url, ...)` → `async with httpx.AsyncClient() as client: response = await client.get(url, ...)`
+- `requests.post(url, ...)` → `async with httpx.AsyncClient() as client: response = await client.post(url, ...)`
+- `requests.put(url, ...)` → `async with httpx.AsyncClient() as client: response = await client.put(url, ...)`
+- `requests.patch(url, ...)` → `async with httpx.AsyncClient() as client: response = await client.patch(url, ...)`
+- `requests.delete(url, ...)` → `async with httpx.AsyncClient() as client: response = await client.delete(url, ...)`
+- `requests.request(method, url, **kwargs)` → `async with httpx.AsyncClient() as client: response = await client.request(method, url, **kwargs)`
+- `requests.exceptions.RequestException` → `httpx.HTTPError`
+
+For tests (if in scope):
+- Add `import pytest` and `from unittest.mock import patch, AsyncMock, MagicMock`
+- Change sync `def test_x():` → `async def test_x():` with `@pytest.mark.asyncio`
+- Mock pattern: patch `httpx.AsyncClient` as a context manager with AsyncMock for `__aenter__`/`__aexit__`
+- Example mock helper:
+```python
+def _make_async_client_mock():
+    client = AsyncMock()
+    cm = MagicMock()
+    cm.__aenter__ = AsyncMock(return_value=client)
+    cm.__aexit__ = AsyncMock(return_value=None)
+    return client, cm
+```
+- In each test: `client, cm = _make_async_client_mock()`, set `client.get = AsyncMock(return_value=mock_response)`, then `with patch('src.module.httpx.AsyncClient', return_value=cm): result = await fn(...)` 
+
+## Codebase conventions
+- Python 3.9
+- Uses `src.config` for API_BASE_URL, API_KEY, etc.
+- Tests use `unittest.mock.patch` and `MagicMock`
+- `sys.path.insert(0, '.')` in test files
+
+## E2E test recipe
+```bash
+cd /tmp/ecommerce-api/.hermes/worktrees/unit-01
+pip install httpx pytest-asyncio
+export PYTHONPATH=$(pwd)
+python -m pytest tests/unit/ -v
+```
+NOTE: Some tests may fail if they import modules from OTHER units that are not yet migrated. This is expected — do NOT fix files outside your scope.
+
+## Instructions
+Safety rules — follow these before anything else:
+- ☐ **FIRST: cd into your worktree** — run `cd /tmp/ecommerce-api/.hermes/worktrees/unit-01` and verify with `pwd`. If you are NOT in your worktree directory — STOP and cd there. NEVER edit files outside your worktree.
+- ☐ NEVER delete source files. If migration fails, revert: git checkout -- <file>
+- ☐ Install required dependencies: pip install httpx pytest-asyncio
+- ☐ Set PYTHONPATH: `export PYTHONPATH=$(pwd)`
+- ☐ Run baseline tests BEFORE any changes: `python -m pytest tests/unit/ -v` — note which tests pass
+- ☐ **STRICT SCOPE**: Modify ONLY the files listed in "Files to modify". ⛔ HARD RULE: NEVER edit any file not in your list — not even test files. If tests fail because other files are not yet migrated — commit anyway and note it in the PR. Do NOT fix files assigned to other workers.
+
+After implementing the change:
+1. Review — run `/requesting-code-review`. **STOP. Do not proceed to step 2 until review is complete and all issues are fixed.**
+2. Re-review — if you made ANY additional changes after step 1, run `/requesting-code-review` again before committing.
+3. Run unit tests — run: `python -m pytest tests/unit/ -v`. If tests fail due to OTHER units' files not being migrated — that is expected, note it in PR.
+4. Run tests — `cd /tmp/ecommerce-api/.hermes/worktrees/unit-01 && export PYTHONPATH=$(pwd) && python -m pytest tests/unit/ -v`. Tests in other files may fail if they import modules not yet migrated — that is expected.
+5. Commit and push — git add -A && git commit -m "batch: migrate src/utils/http.py from requests to httpx async" && git push origin HEAD:batch/unit-01
+6. Create PR — gh pr create --title "Batch: utils/http.py" --body "Migrates src/utils/http.py from sync requests to async httpx. Core HTTP helper functions (get/post/put/patch/delete)"
+   If PR already exists: gh pr edit <number> --body "Migrates src/utils/http.py from sync requests to async httpx." and use existing URL
+7. Report — end your response with exactly one line: PR: <url>
+   If no PR was created, end with: PR: none - <reason>
