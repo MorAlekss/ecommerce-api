@@ -1,0 +1,80 @@
+You are a batch migration worker. Your task is strictly scoped.
+You have NO access to the coordinator's context — everything you need is below.
+
+## Your worktree path
+/tmp/ecommerce-api/.hermes/worktrees/unit-7
+cd into this directory FIRST. Run `pwd` to verify. If not in your worktree — STOP and cd there.
+
+## Overall goal
+Migrate all HTTP calls from requests library to httpx async across the codebase.
+
+## Your specific task
+src/notifications/email.py — Convert email notification API calls (send_email, send_bulk_email, get_email_status, unsubscribe_email) from sync requests to async httpx.
+
+## Files to modify
+src/notifications/email.py
+
+## Codebase conventions
+- Python 3.9+, pytest for testing
+- Functions return response.json() or response.status_code
+- Uses src.config for API_BASE_URL, API_KEY, etc.
+- Tests use unittest.mock.patch to mock HTTP calls
+- pyproject.toml with [tool.pytest.ini_options] testpaths = ["tests"]
+
+### What to change
+
+**Import:** `import requests` → `import httpx`
+
+**Every function must become `async def`** and use `httpx.AsyncClient()`:
+
+```python
+# BEFORE (sync):
+import requests
+def get(url, params=None, headers=None):
+    response = requests.get(url, params=params, headers=headers)
+    response.raise_for_status()
+    return response.json()
+
+# AFTER (async):
+import httpx
+async def get(url, params=None, headers=None):
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, params=params, headers=headers)
+        response.raise_for_status()
+        return response.json()
+```
+
+**Exception mapping:**
+- `requests.exceptions.RequestException` → `httpx.RequestError`
+- `requests.exceptions.HTTPError` → `httpx.HTTPStatusError`
+
+**Delete method returns:** `response.status_code` (same pattern, just async)
+
+**JSON data:** `requests.get/post(..., json=data)` → `httpx client.get/post(..., json=data)` — same parameter name, works identically.
+
+**requirements.txt:** Add `httpx>=0.27.0` alongside existing `requests` line (do NOT remove requests yet — other files may still depend on it).
+
+
+## E2E test recipe
+```bash
+python3 -m pytest tests/unit/ --tb=short -q
+```
+
+## Instructions
+Safety rules — follow these before anything else:
+- ☐ **FIRST: cd into your worktree** — run `cd /tmp/ecommerce-api/.hermes/worktrees/unit-7` and verify with `pwd`. If you are NOT in your worktree directory — STOP and cd there. NEVER edit files outside your worktree.
+- ☐ NEVER delete source files. If migration fails, revert: git checkout -- <file>
+- ☐ Install required dependencies before starting: pip install httpx pytest-asyncio
+- ☐ Run baseline tests BEFORE any changes: python3 -m pytest tests/unit/ --tb=short -q — note which tests pass
+- ☐ **STRICT SCOPE**: Modify ONLY the files listed in "Files to modify". ⛔ HARD RULE: NEVER edit any file not in your list — not even test files. If tests fail because other files are not yet migrated — commit anyway and note it in the PR. Do NOT fix files assigned to other workers.
+
+After implementing the change:
+1. Review — run `/requesting-code-review`. **STOP. Do not proceed to step 2 until review is complete and all issues are fixed.**
+2. Re-review — if you made ANY additional changes after step 1, run `/requesting-code-review` again before committing.
+3. Run unit tests — run: python3 -m pytest tests/unit/ --tb=short -q. If tests fail due to OTHER units' files not being migrated — that is expected, note it in PR.
+4. Test end-to-end — follow the e2e test recipe above
+5. Commit and push — git add -A && git commit -m "batch: src/notifications/email.py" && git push origin HEAD:batch/unit-7
+6. Create PR — gh pr create --title "Batch: src/notifications/email.py" --body "Convert email notification API calls (send_email, send_bulk_email, get_email_status, unsubscribe_email) from sync requests to async httpx."
+   If PR already exists: gh pr edit <number> --body "Convert email notification API calls (send_email, send_bulk_email, get_email_status, unsubscribe_email) from sync requests to async httpx." and use existing URL
+7. Report — end your response with exactly one line: PR: <url>
+   If no PR was created, end with: PR: none - <reason>
