@@ -1,0 +1,105 @@
+You are a batch migration worker. Your task is strictly scoped.
+You have NO access to the coordinator's context — everything you need is below.
+
+## Your worktree path
+/tmp/ecommerce-api/.hermes/worktrees/unit-08
+cd into this directory FIRST. Run `pwd` to verify. If not in your worktree — STOP and cd there.
+
+## Overall goal
+Migrate all HTTP calls from requests library to httpx async across the codebase
+
+## Your specific task
+Unit 8: Migrate src/notifications/sms.py from requests to httpx async
+
+## Files to modify
+- src/notifications/sms.py
+- tests/unit/test_notifications.py
+
+## What to change
+Migrate from sync `requests` to async `httpx.AsyncClient()`.
+
+Source file pattern (BEFORE):
+```python
+import requests
+from src.config import API_BASE_URL, SMS_API_KEY
+
+SMS_HEADERS = {"X-SMS-API-Key": SMS_API_KEY}
+
+def send_sms(to, message):
+    response = requests.post(f"{API_BASE_URL}/notifications/sms",
+                             json={"to": to, "message": message}, headers=SMS_HEADERS)
+    response.raise_for_status()
+    return response.json()
+```
+
+Target pattern (AFTER):
+```python
+import httpx
+from src.config import API_BASE_URL, SMS_API_KEY
+
+SMS_HEADERS = {"X-SMS-API-Key": SMS_API_KEY}
+
+async def send_sms(to, message):
+    async with httpx.AsyncClient() as client:
+        response = await client.post(f"{API_BASE_URL}/notifications/sms",
+                                 json={"to": to, "message": message}, headers=SMS_HEADERS)
+        response.raise_for_status()
+        return response.json()
+```
+
+Apply this to ALL 3 functions: send_sms, send_bulk_sms, get_sms_status.
+
+For test_notifications.py: update ALL tests to async. Use `pytest.mark.asyncio` decorator.
+Mock `httpx.AsyncClient` instead of `requests.post/get`.
+Example test pattern (AFTER):
+```python
+import pytest
+from unittest.mock import patch, MagicMock, AsyncMock
+
+@pytest.mark.asyncio
+async def test_send_sms():
+    mock_response = MagicMock()
+    mock_response.json.return_value = {"id": "sms_123", "status": "sent"}
+    mock_response.raise_for_status.return_value = None
+    mock_client = AsyncMock()
+    mock_client.post.return_value = mock_response
+    with patch('src.notifications.sms.httpx.AsyncClient') as mock_cls:
+        mock_cls.return_value.__aenter__.return_value = mock_client
+        result = await send_sms("+123****7890", "Your order is ready!")
+        assert result["status"] == "sent"
+```
+
+Also update test_send_email, test_send_bulk_email in test_notifications.py (they test email.py functions). Since email.py is being migrated in parallel, those test functions must be async and mock httpx.AsyncClient for that module too.
+
+## Codebase conventions
+- All async functions use `async with httpx.AsyncClient() as client:` pattern
+- See existing httpx async examples in src/auth/login.py, src/products/catalog.py
+- Functions that return JSON use `response.json()`
+- `raise_for_status()` is always called after the request
+
+## E2E test recipe
+```bash
+cd /tmp/ecommerce-api/.hermes/worktrees/unit-08
+pip install httpx pytest pytest-mock pytest-asyncio 2>/dev/null
+python3 -m pytest tests/unit/test_notifications.py --tb=short -q
+```
+
+## Instructions
+Safety rules — follow these before anything else:
+- ☐ **FIRST: cd into your worktree** — run `cd /tmp/ecommerce-api/.hermes/worktrees/unit-08` and verify with `pwd`. If you are NOT in your worktree directory — STOP and cd there. NEVER edit files outside your worktree.
+- ☐ NEVER delete source files. If migration fails, revert: git checkout -- <file>
+- ☐ Install required dependencies before starting: pip install httpx pytest pytest-mock pytest-asyncio
+- ☐ Set PYTHONPATH if needed: `export PYTHONPATH=$(pwd)`
+- ☐ Run baseline tests BEFORE any changes: `python3 -m pytest tests/unit/test_notifications.py --tb=short -q` — note which tests pass
+- ☐ **STRICT SCOPE**: Modify ONLY the files listed in "Files to modify". ⛔ HARD RULE: NEVER edit any file not in your list — not even test files. If tests fail because other files are not yet migrated — commit anyway and note it in the PR. Do NOT fix files assigned to other workers.
+
+After implementing the change:
+1. Review — run `/requesting-code-review`. **STOP. Do not proceed to step 2 until review is complete and all issues are fixed.**
+2. Re-review — if you made ANY additional changes after step 1, run `/requesting-code-review` again before committing.
+3. Run unit tests — run: `python3 -m pytest tests/unit/test_notifications.py --tb=short -q`. If tests fail due to OTHER units' files not being migrated — that is expected, note it in PR.
+4. Test end-to-end — follow the e2e test recipe above
+5. Commit and push — git add -A && git commit -m "batch: migrate notifications/sms from requests to httpx async" && git push origin HEAD:batch/unit-08
+6. Create PR — gh pr create --title "Batch: migrate notifications/sms from requests to httpx async" --body "Migrated src/notifications/sms.py from sync requests to async httpx. Updated tests/unit/test_notifications.py."
+   If PR already exists: gh pr edit <number> --body "..." and use existing URL
+7. Report — end your response with exactly one line: PR: <url>
+   If no PR was created, end with: PR: none - <reason>
